@@ -12,19 +12,37 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // Clear loading message
       activitiesList.innerHTML = "";
+      // reset select options (keep placeholder)
+      activitySelect.innerHTML = '<option value="">-- Select an activity --</option>';
 
       // Populate activities list
       Object.entries(activities).forEach(([name, details]) => {
         const activityCard = document.createElement("div");
         activityCard.className = "activity-card";
+        activityCard.dataset.activity = name;
 
         const spotsLeft = details.max_participants - details.participants.length;
 
         activityCard.innerHTML = `
           <h4>${name}</h4>
-          <p>${details.description}</p>
+          <p class="description">${details.description}</p>
           <p><strong>Schedule:</strong> ${details.schedule}</p>
           <p><strong>Availability:</strong> ${spotsLeft} spots left</p>
+          <div class="participants">
+            <strong>Participants:</strong>
+            <ul class="participants-list">
+              ${
+                details.participants && details.participants.length > 0
+                  ? details.participants
+                      .map(
+                        (p) =>
+                          `<li class="participant-item"><span class="participant-email">${p}</span><button class="remove-participant" data-email="${p}" aria-label="Remove ${p}">×</button></li>`
+                      )
+                      .join("")
+                  : '<li class="muted">No participants yet</li>'
+              }
+            </ul>
+          </div>
         `;
 
         activitiesList.appendChild(activityCard);
@@ -35,6 +53,7 @@ document.addEventListener("DOMContentLoaded", () => {
         option.textContent = name;
         activitySelect.appendChild(option);
       });
+      
     } catch (error) {
       activitiesList.innerHTML = "<p>Failed to load activities. Please try again later.</p>";
       console.error("Error fetching activities:", error);
@@ -62,6 +81,8 @@ document.addEventListener("DOMContentLoaded", () => {
         messageDiv.textContent = result.message;
         messageDiv.className = "success";
         signupForm.reset();
+        // Refresh activity list to show the newly signed-up participant
+        fetchActivities();
       } else {
         messageDiv.textContent = result.detail || "An error occurred";
         messageDiv.className = "error";
@@ -78,6 +99,49 @@ document.addEventListener("DOMContentLoaded", () => {
       messageDiv.className = "error";
       messageDiv.classList.remove("hidden");
       console.error("Error signing up:", error);
+    }
+  });
+
+  // Delegate click handler for remove buttons (attach once)
+  activitiesList.addEventListener("click", async (e) => {
+    const btn = e.target.closest(".remove-participant");
+    if (!btn) return;
+    const email = btn.dataset.email;
+    const activityCard = btn.closest(".activity-card");
+    const activityName = activityCard && activityCard.dataset.activity;
+
+    if (!activityName || !email) return;
+
+    // Disable button while processing
+    btn.disabled = true;
+
+    try {
+      const res = await fetch(`/activities/${encodeURIComponent(activityName)}/signup?email=${encodeURIComponent(email)}`, {
+        method: "DELETE",
+      });
+
+      const result = await res.json();
+
+      if (res.ok) {
+        messageDiv.textContent = result.message;
+        messageDiv.className = "success";
+        messageDiv.classList.remove("hidden");
+        // Refresh activities to reflect change
+        fetchActivities();
+      } else {
+        messageDiv.textContent = result.detail || "Failed to remove participant";
+        messageDiv.className = "error";
+        messageDiv.classList.remove("hidden");
+      }
+
+      setTimeout(() => messageDiv.classList.add("hidden"), 4000);
+    } catch (err) {
+      console.error("Error removing participant:", err);
+      messageDiv.textContent = "Failed to remove participant. Please try again.";
+      messageDiv.className = "error";
+      messageDiv.classList.remove("hidden");
+    } finally {
+      btn.disabled = false;
     }
   });
 
